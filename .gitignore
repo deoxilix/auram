@@ -27,3 +27,9 @@ frontend/dist/
 
 # Design docs - kept local
 architecture/
+
+# TypeScript build cache
+*.tsbuildinfo
+
+# Local design assets
+frontend/auram-designs/

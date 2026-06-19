@@ -22,6 +22,16 @@ class Settings(BaseSettings):
     qdrant_api_key: str | None = None
     qdrant_collection: str = "auram_chunks"
 
+    # LiveKit
+    livekit_api_key: str = "devkey"
+    livekit_api_secret: str = "secret"
+    # ws/wss URL the agent + clients connect to.
+    livekit_ws_url: str = "ws://localhost:7880"
+
+    # Realtime host agent
+    realtime_model: str = "gpt-4o-realtime-preview-2024-12-17"
+    realtime_voice: str = "alloy"
+
     # AI providers
     openai_api_key: str = ""
     elevenlabs_api_key: str | None = None

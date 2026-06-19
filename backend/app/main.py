@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import models  # noqa: F401 — registers tables on SQLModel.metadata
-from app.api.routes import documents, podcasts
+from app.api.routes import documents, podcasts, sessions
 from app.core.config import settings
 from app.core.database import init_db
 from app.core.logging import configure_logging, get_logger
@@ -34,6 +34,7 @@ app.add_middleware(
 
 app.include_router(documents.router, prefix=settings.api_v1_prefix)
 app.include_router(podcasts.router, prefix=settings.api_v1_prefix)
+app.include_router(sessions.router, prefix=settings.api_v1_prefix)
 
 
 @app.get("/health")

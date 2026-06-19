@@ -128,9 +128,16 @@ auram/
 
 ---
 
-## Phase 2 — Live Sessions (Weeks 4–6)
+## Phase 2 — Live Sessions (Weeks 4–6) — ✅ IMPLEMENTED
 
 **Goal**: Real-time conversational podcast via WebRTC. User can interrupt and ask questions.
+
+> Status: Session Manager (LiveKit rooms, tokens, lifecycle), Host Agent
+> (OpenAI Realtime via LiveKit Agents 1.x with function tools + state machine),
+> and the frontend Session page (visualizer, live transcript, push-to-talk
+> interrupt, progress) are built. Running live sessions requires a LiveKit
+> server and an OpenAI key with Realtime access. The host agent runs as a
+> separate worker: `python -m app.agents.host_agent.agent dev`.
 
 ### Backend
 

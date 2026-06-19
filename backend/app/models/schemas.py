@@ -4,7 +4,14 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from app.models.enums import DocumentStatus, DocumentType, PodcastStatus, SegmentType, Tone
+from app.models.enums import (
+    DocumentStatus,
+    DocumentType,
+    PodcastStatus,
+    SegmentType,
+    SessionStatus,
+    Tone,
+)
 from app.models.podcast import SpeakerProfile
 
 
@@ -63,3 +70,28 @@ class PodcastResponse(BaseModel):
     status: PodcastStatus
     created_at: datetime
     error: str | None = None
+
+
+# ---- Sessions ----
+class CreateSessionRequest(BaseModel):
+    podcast_id: UUID
+
+
+class SessionResponse(BaseModel):
+    id: UUID
+    script_id: UUID
+    room_name: str
+    status: SessionStatus
+    current_segment_index: int
+    # Connection details (token only populated on create/join).
+    ws_url: str | None = None
+    token: str | None = None
+
+
+class TurnResponse(BaseModel):
+    id: UUID
+    speaker_id: str
+    text: str
+    segment_index: int
+    is_interruption: bool
+    timestamp: datetime

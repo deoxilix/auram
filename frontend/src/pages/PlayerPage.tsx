@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import AudioPlayer from "../components/AudioPlayer";
 import StatusBadge from "../components/StatusBadge";
 import {
@@ -10,6 +10,7 @@ import {
 
 export default function PlayerPage() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const { data: podcast, isLoading } = usePodcast(id);
   const [audioRequested, setAudioRequested] = useState(false);
   const { data: manifest } = useAudioManifest(id, audioRequested);
@@ -39,6 +40,13 @@ export default function PlayerPage() {
       <div className="mb-2 mt-2 flex items-center gap-3">
         <h1 className="text-2xl font-bold">{podcast.title}</h1>
         <StatusBadge status={podcast.status} />
+        <button
+          className="ml-auto rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
+          disabled={podcast.status !== "ready"}
+          onClick={() => navigate(`/podcasts/${podcast.id}/live`)}
+        >
+          Go Live
+        </button>
       </div>
       <p className="mb-6 text-sm text-slate-600">{podcast.overview}</p>
 

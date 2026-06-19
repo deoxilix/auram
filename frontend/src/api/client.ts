@@ -5,6 +5,8 @@ import type {
   DocumentType,
   PodcastResponse,
   ScriptParams,
+  SessionResponse,
+  TurnResponse,
 } from "../types";
 
 const api = axios.create({
@@ -49,6 +51,29 @@ export const podcastsApi = {
 
   audioManifest: (id: string) =>
     api.get<AudioManifest>(`/api/v1/podcasts/${id}/audio`).then((r) => r.data),
+};
+
+export const sessionsApi = {
+  create: (podcast_id: string) =>
+    api
+      .post<SessionResponse>("/api/v1/sessions", { podcast_id })
+      .then((r) => r.data),
+
+  get: (id: string) =>
+    api.get<SessionResponse>(`/api/v1/sessions/${id}`).then((r) => r.data),
+
+  join: (id: string) =>
+    api
+      .post<SessionResponse>(`/api/v1/sessions/${id}/join`)
+      .then((r) => r.data),
+
+  leave: (id: string) =>
+    api.post(`/api/v1/sessions/${id}/leave`).then((r) => r.data),
+
+  history: (id: string) =>
+    api
+      .get<TurnResponse[]>(`/api/v1/sessions/${id}/history`)
+      .then((r) => r.data),
 };
 
 export default api;

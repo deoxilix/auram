@@ -73,3 +73,24 @@ export interface AudioManifest {
   ready: boolean;
   segments: AudioManifestItem[];
 }
+
+export type SessionStatus = "waiting" | "live" | "paused" | "ended";
+
+export interface SessionResponse {
+  id: string;
+  script_id: string;
+  room_name: string;
+  status: SessionStatus;
+  current_segment_index: number;
+  ws_url: string | null;
+  token: string | null;
+}
+
+export interface TurnResponse {
+  id: string;
+  speaker_id: string;
+  text: string;
+  segment_index: number;
+  is_interruption: boolean;
+  timestamp: string;
+}

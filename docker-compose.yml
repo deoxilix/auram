@@ -33,6 +33,14 @@ services:
     volumes:
       - qdrant_data:/qdrant/storage
 
+  livekit:
+    image: livekit/livekit-server:latest
+    command: --dev --bind 0.0.0.0
+    ports:
+      - "7880:7880"
+      - "7881:7881"
+      - "7882:7882/udp"
+
   backend:
     build: ./backend
     env_file: .env
@@ -58,6 +66,16 @@ services:
       - redis
       - postgres
     command: celery -A app.workers.celery_app worker -l info
+
+  host-agent:
+    build: ./backend
+    env_file: .env
+    volumes:
+      - ./backend:/app
+    depends_on:
+      - livekit
+      - postgres
+    command: python -m app.agents.host_agent.agent start
 
 volumes:
   postgres_data:

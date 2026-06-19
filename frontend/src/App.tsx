@@ -2,6 +2,7 @@ import { Link, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import UploadPage from "./pages/UploadPage";
 import LibraryPage from "./pages/LibraryPage";
 import PlayerPage from "./pages/PlayerPage";
+import SessionPage from "./pages/SessionPage";
 
 function NavLink({ to, label }: { to: string; label: string }) {
   const { pathname } = useLocation();
@@ -34,6 +35,7 @@ export default function App() {
           <Route path="/" element={<UploadPage />} />
           <Route path="/library" element={<LibraryPage />} />
           <Route path="/podcasts/:id" element={<PlayerPage />} />
+          <Route path="/podcasts/:id/live" element={<SessionPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>

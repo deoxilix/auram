@@ -1,9 +1,14 @@
 # Auram
 
 Convert any content source (URLs, PDFs, text) into a conversational podcast.
-Phase 1 (this milestone) covers: **content ingestion → script generation →
-multi-speaker TTS → web audio player**. Live interactive sessions arrive in
-Phase 2 (see `plan.md`).
+
+- **Phase 1** — content ingestion → script generation → multi-speaker TTS → web
+  audio player.
+- **Phase 2** — live interactive sessions: join the podcast over WebRTC, hear an
+  AI host in real time, and interrupt to ask questions (LiveKit + OpenAI
+  Realtime).
+
+See `plan.md` for the full roadmap.
 
 ## Architecture
 
@@ -13,12 +18,12 @@ Phase 2 (see `plan.md`).
 
 ## Prerequisites
 
-You need **PostgreSQL**, **Redis**, and **Qdrant** running. The easiest path is
-Docker Compose (note: Docker is **not** currently installed on this machine):
+You need **PostgreSQL**, **Redis**, **Qdrant**, and (for live sessions)
+**LiveKit** running. The easiest path is Docker Compose:
 
 ```bash
 cp .env.example .env          # then fill in OPENAI_API_KEY
-docker compose up -d postgres redis qdrant
+docker compose up -d postgres redis qdrant livekit
 ```
 
 If you don't have Docker, run the three services however you prefer (Homebrew
@@ -52,6 +57,19 @@ Run tests:
 ```bash
 cd backend && source .venv/bin/activate && pytest -q
 ```
+
+### Host agent (live sessions)
+
+The realtime host runs as a separate LiveKit Agents worker. It needs an
+`OPENAI_API_KEY` with Realtime access and a running LiveKit server:
+
+```bash
+cd backend && source .venv/bin/activate
+python -m app.agents.host_agent.agent dev
+```
+
+When you click **Go Live** on a podcast, the backend provisions a LiveKit room
+and dispatches this agent into it.
 
 ## Frontend
 
@@ -88,3 +106,8 @@ needed when both run locally.
 | POST | `/api/v1/podcasts/{id}/audio/generate` | Synthesize audio |
 | GET | `/api/v1/podcasts/{id}/audio` | Audio manifest |
 | GET | `/api/v1/podcasts/{id}/audio/{segment_id}` | Stream a segment |
+| POST | `/api/v1/sessions` | Start a live session (returns token) |
+| GET | `/api/v1/sessions/{id}` | Session state |
+| POST | `/api/v1/sessions/{id}/join` | Fresh participant token |
+| POST | `/api/v1/sessions/{id}/leave` | End the session |
+| GET | `/api/v1/sessions/{id}/history` | Conversation transcript |

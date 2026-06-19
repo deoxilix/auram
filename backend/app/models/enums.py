@@ -35,3 +35,17 @@ class Tone(StrEnum):
     CONVERSATIONAL = "conversational"
     EDUCATIONAL = "educational"
     STORYTELLING = "storytelling"
+
+
+class SessionStatus(StrEnum):
+    WAITING = "waiting"
+    LIVE = "live"
+    PAUSED = "paused"
+    ENDED = "ended"
+
+
+class InterruptionAction(StrEnum):
+    ANSWER = "answer"
+    DEFER = "defer"
+    REDIRECT = "redirect"
+    ACKNOWLEDGE = "acknowledge"
