@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { RoomAudioRenderer, useConnectionState } from "@livekit/components-react";
 import type { PodcastResponse } from "../../types";
 import AudioVisualizer from "./AudioVisualizer";
@@ -9,11 +8,11 @@ interface Props {
   podcast: PodcastResponse;
   currentIndex: number;
   onLeave: () => void;
+  sessionId?: string;
 }
 
-export default function SessionRoom({ podcast, currentIndex, onLeave }: Props) {
+export default function SessionRoom({ podcast, currentIndex, onLeave, sessionId }: Props) {
   const connection = useConnectionState();
-  const [typedQuestion, setTypedQuestion] = useState("");
 
   const total = podcast.segments.length;
   const currentSeg = podcast.segments[currentIndex];
@@ -136,20 +135,6 @@ export default function SessionRoom({ podcast, currentIndex, onLeave }: Props) {
           {/* Hold to Speak + Type */}
           <div className="space-y-2">
             <InterruptionButton />
-            <div className="flex gap-2">
-              <input
-                type="text"
-                placeholder="Or type your question..."
-                value={typedQuestion}
-                onChange={(e) => setTypedQuestion(e.target.value)}
-                className="flex-1 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm outline-none transition focus:border-brand-400 focus:ring-2 focus:ring-brand-50"
-              />
-              <button
-                className="rounded-xl bg-brand-400 px-4 text-sm font-semibold text-white transition hover:bg-brand-500 active:scale-[0.98]"
-              >
-                Send
-              </button>
-            </div>
           </div>
         </div>
 
@@ -159,7 +144,7 @@ export default function SessionRoom({ podcast, currentIndex, onLeave }: Props) {
             Live Transcript
           </div>
           <div className="h-full overflow-y-auto">
-            <TranscriptPanel />
+            <TranscriptPanel speakers={podcast.speakers} sessionId={sessionId} />
           </div>
         </div>
       </div>

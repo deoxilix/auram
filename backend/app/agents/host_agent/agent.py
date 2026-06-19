@@ -3,6 +3,7 @@
 Run as a LiveKit Agents worker:
     python -m app.agents.host_agent.agent dev
 """
+import asyncio
 import json
 
 from livekit.agents import (
@@ -40,23 +41,34 @@ class HostAgent(Agent):
     async def get_current_segment(self, _ctx: RunContext) -> str:
         """Return the script text you should cover right now, with progress info."""
         seg = self.state.current()
+        log.info("get_current_segment_called",
+                 index=self.state.index, speaker=seg.speaker_id if seg else None)
         if seg is None:
             return "The script is complete. Give a brief outro and wrap up."
+        speaker_label = seg.speaker_id.upper()
         return (
-            f"Segment {self.state.index + 1}/{len(self.state.segments)} "
-            f"(type={seg.segment_type}): {seg.text}\n"
+            f"SEGMENT {self.state.index + 1}/{len(self.state.segments)} "
+            f"(type={seg.segment_type}, speaker={speaker_label}):\n"
+            f"Speak as {speaker_label} and say:\n{seg.text}\n"
             f"Upcoming: {'; '.join(self.state.upcoming_topics()) or '(end)'}"
         )
 
     @function_tool
     async def advance_segment(self, _ctx: RunContext) -> str:
         """Move to the next script segment once you finish the current one."""
+        log.info("advance_segment_called", current_index=self.state.index)
         nxt = self.state.advance()
         await manager.update_progress(self.state.session_id, self.state.index)
+        log.info("advance_segment_result",
+                 new_index=self.state.index, has_next=nxt is not None)
         if nxt is None:
             self.state.phase = Phase.ENDED
             return "End of script. Give a short outro, then thank the listener."
-        return f"Now on segment {self.state.index + 1}: {nxt.text}"
+        speaker_label = nxt.speaker_id.upper()
+        return (
+            f"ADVANCED to segment {self.state.index + 1}/{len(self.state.segments)} "
+            f"(speaker={speaker_label}). Speak as {speaker_label} and say:\n{nxt.text}"
+        )
 
     @function_tool
     async def answer_question(self, _ctx: RunContext, question: str) -> str:
@@ -107,45 +119,68 @@ async def entrypoint(ctx: JobContext) -> None:
     log.info("host_agent_starting", session_id=meta["session_id"],
              segments=len(state.segments))
 
-    session = AgentSession(
-        llm=openai.realtime.RealtimeModel(
-            model=settings.realtime_model,
-            voice=settings.realtime_voice,
-            api_key=settings.openai_api_key,
-        ),
+    # Single session — the Realtime API doesn't allow changing voice
+    # mid-conversation, so both speakers use the same voice.
+    # We differentiate via instructions and transcript labels.
+    host_llm = openai.realtime.RealtimeModel(
+        model=settings.realtime_model, voice=settings.realtime_voice,
+        api_key=settings.openai_api_key,
     )
+    session = AgentSession(llm=host_llm)
 
-    # Best-effort transcript logging of completed turns.
     @session.on("conversation_item_added")
-    def _on_item(ev) -> None:  # noqa: ANN001 — event type is plugin-internal
+    def _on_item(ev) -> None:  # noqa: ANN001
         try:
             item = ev.item
             role = getattr(item, "role", "")
             text = getattr(item, "text_content", None) or ""
-            if not text:
+            if not text or role != "assistant":
                 return
-            speaker = "user" if role == "user" else "host"
+            # Read state.current() for speaker_id — even though state.index
+            # may have advanced past this segment, we still get the right
+            # segment from the segments list based on the SAVED index.
+            saved_idx = _on_item._current_idx  # type: ignore[attr-defined]
+            if 0 <= saved_idx < len(state.segments):
+                speaker_id = state.segments[saved_idx].speaker_id
+            else:
+                speaker_id = "host"
             import asyncio
-
             asyncio.create_task(
                 manager.add_turn(
-                    state.session_id,
-                    speaker_id=speaker,
-                    text=text,
-                    segment_index=state.index,
-                    is_interruption=(speaker == "user"),
+                    state.session_id, speaker_id=speaker_id,
+                    text=text, segment_index=saved_idx,
+                    is_interruption=False,
                 )
             )
-        except Exception:  # noqa: BLE001 — never let logging break the session
+        except Exception:
             pass
 
     await session.start(agent=HostAgent(state), room=ctx.room)
     await manager.update_progress(state.session_id, 0)
 
-    # Kick off the intro.
-    await session.generate_reply(
-        instructions="Warmly welcome the listener and begin the intro segment."
-    )
+    # Loop through segments.  Each generate_reply sends the segment text
+    # as user_input so the model speaks it directly.
+    for i, seg in enumerate(state.segments):
+        state.index = i
+        _on_item._current_idx = i  # type: ignore[attr-defined]
+        speaker = seg.speaker_id.upper()
+        log.info("segment_speak", index=i, speaker=speaker)
+        handle = session.generate_reply(
+            user_input=(
+                f"Continue the podcast. You are {speaker}. "
+                f"Say this in English naturally:\n{seg.text}"
+            )
+        )
+        await handle.wait_for_playout()
+
+        if handle.interrupted:
+            log.info("segment_interrupted", index=i, speaker=speaker)
+            await asyncio.sleep(10)
+
+        await manager.update_progress(state.session_id, i)
+        log.info("segment_done", index=i, speaker=speaker)
+
+    log.info("podcast_complete")
 
 
 if __name__ == "__main__":

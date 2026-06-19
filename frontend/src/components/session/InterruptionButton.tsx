@@ -1,33 +1,59 @@
-import { useState } from "react";
-import { useLocalParticipant } from "@livekit/components-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useRoomContext } from "@livekit/components-react";
 
 /**
- * Push-to-talk: the mic stays muted until held. While held, the user's audio is
- * published and the realtime host detects the interruption and responds.
+ * Push-to-talk: mic enables on press, disables on release.
+ * Requests mic permission once on mount then keeps the track disabled.
  */
 export default function InterruptionButton() {
-  const { localParticipant } = useLocalParticipant();
+  const room = useRoomContext();
   const [talking, setTalking] = useState(false);
+  const readyRef = useRef(false);
 
-  const start = async () => {
+  // Request mic permission once, keep disabled.
+  useEffect(() => {
+    const p = room?.localParticipant;
+    if (!p || readyRef.current) return;
+    readyRef.current = true;
+    p.enableCameraAndMicrophone().catch(() => {});
+    // Mute the mic immediately after permission is granted.
+    setTimeout(() => p.setMicrophoneEnabled(false).catch(() => {}), 100);
+  }, [room]);
+
+  const start = useCallback(async () => {
+    const p = room?.localParticipant;
+    if (!p) return;
     setTalking(true);
-    await localParticipant.setMicrophoneEnabled(true);
-  };
-  const stop = async () => {
+    try {
+      await p.setMicrophoneEnabled(true);
+    } catch {
+      setTalking(false);
+    }
+  }, [room]);
+
+  const stop = useCallback(async () => {
+    const p = room?.localParticipant;
+    if (!p) return;
     setTalking(false);
-    await localParticipant.setMicrophoneEnabled(false);
-  };
+    try {
+      await p.setMicrophoneEnabled(false);
+    } catch {
+      // ignore
+    }
+  }, [room]);
 
   return (
     <button
-      onPointerDown={start}
-      onPointerUp={stop}
-      onPointerLeave={() => talking && stop()}
+      onMouseDown={start}
+      onMouseUp={stop}
+      onTouchStart={start}
+      onTouchEnd={stop}
+      disabled={!room?.localParticipant}
       className={
         "w-full select-none rounded-xl px-6 py-4 text-base font-semibold text-white transition-all " +
         (talking
-          ? "scale-[0.99] bg-emerald-500 shadow-sm"
-          : "bg-brand-400 shadow-sm hover:bg-brand-500 active:scale-[0.98]")
+          ? "bg-emerald-500 shadow-sm"
+          : "bg-brand-400 shadow-sm hover:bg-brand-500 active:scale-[0.98] disabled:opacity-40")
       }
     >
       {talking ? (

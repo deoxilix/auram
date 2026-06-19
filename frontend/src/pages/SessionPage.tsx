@@ -86,6 +86,7 @@ export default function SessionPage() {
         podcast={podcast}
         currentIndex={liveState?.current_segment_index ?? 0}
         onLeave={onLeave}
+        sessionId={session?.id}
       />
     </LiveKitRoom>
   );

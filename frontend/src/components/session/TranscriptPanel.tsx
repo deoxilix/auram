@@ -1,13 +1,35 @@
 import { useEffect, useRef } from "react";
 import { useTranscriptions } from "../../hooks/useTranscriptions";
+import type { SpeakerProfile } from "../../types";
 
-export default function TranscriptPanel() {
-  const lines = useTranscriptions();
+interface Props {
+  speakers: SpeakerProfile[];
+  sessionId?: string;
+}
+
+export default function TranscriptPanel({ speakers, sessionId }: Props) {
+  const lines = useTranscriptions(sessionId);
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [lines.length]);
+
+  // Build a lookup: speaker_id -> name
+  const lookup = new Map<string, string>();
+  for (const s of speakers) {
+    lookup.set(s.id, s.name);
+  }
+
+  const speakerLabel = (id: string): string => {
+    return lookup.get(id) ?? (id === "user" ? "YOU" : id.toUpperCase());
+  };
+
+  const speakerColor = (id: string): string => {
+    if (id === "user") return "text-amber-600";
+    if (id === "guest") return "text-emerald-600";
+    return "text-brand-500";
+  };
 
   return (
     <div className="flex h-full flex-col p-4">
@@ -18,13 +40,12 @@ export default function TranscriptPanel() {
           </p>
         )}
         {lines.map((line) => {
-          const isUser = line.speaker === "user";
-          const color = isUser ? "text-amber-600" : "text-brand-500";
-          const label = isUser ? "YOU" : "HOST";
+          const name = speakerLabel(line.speaker);
+          const color = speakerColor(line.speaker);
           return (
             <div key={line.id}>
               <span className={`mr-2 text-xs font-bold uppercase ${color}`}>
-                {label}
+                {name}
               </span>
               <span className={line.final ? "text-slate-700" : "text-slate-400 italic"}>
                 {line.text}

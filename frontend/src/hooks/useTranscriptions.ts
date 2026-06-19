@@ -1,47 +1,66 @@
 import { useEffect, useState } from "react";
-import { RoomEvent, type TranscriptionSegment, type Participant } from "livekit-client";
-import { useRoomContext } from "@livekit/components-react";
+import { sessionsApi } from "../api/client";
 
 export interface TranscriptLine {
   id: string;
-  speaker: "user" | "host";
+  speaker: string;
   text: string;
   final: boolean;
 }
 
-/** Collects real-time transcription segments from the room, ordered by arrival. */
-export function useTranscriptions(): TranscriptLine[] {
-  const room = useRoomContext();
-  const [lines, setLines] = useState<Record<string, TranscriptLine>>({});
+/**
+ * Polls the DB conversation history to get the transcript with correct
+ * speaker labels (host=Alex, guest=Sam). Polls every 3 seconds.
+ */
+export function useTranscriptions(sessionId?: string): TranscriptLine[] {
+  const [lines, setLines] = useState<Map<string, TranscriptLine>>(new Map());
   const [order, setOrder] = useState<string[]>([]);
 
   useEffect(() => {
-    if (!room) return;
-    const onTranscription = (
-      segments: TranscriptionSegment[],
-      participant?: Participant,
-    ) => {
-      const speaker: "user" | "host" =
-        participant && !participant.isLocal ? "host" : "user";
-      setLines((prev) => {
-        const next = { ...prev };
-        for (const s of segments) {
-          next[s.id] = { id: s.id, speaker, text: s.text, final: s.final };
-        }
-        return next;
-      });
-      setOrder((prev) => {
-        const seen = new Set(prev);
-        const added = segments.map((s) => s.id).filter((id) => !seen.has(id));
-        return added.length ? [...prev, ...added] : prev;
-      });
+    if (!sessionId) return;
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const turns = await sessionsApi.history(sessionId);
+        if (cancelled) return;
+        setLines((prev) => {
+          const next = new Map(prev);
+          for (const t of turns) {
+            const id = `db-${t.id}`;
+            if (!next.has(id)) {
+              next.set(id, {
+                id,
+                speaker: t.speaker_id,
+                text: t.text,
+                final: true,
+              });
+            }
+          }
+          return next;
+        });
+        setOrder((prev) => {
+          const seen = new Set(prev);
+          const added: string[] = [];
+          for (const t of turns) {
+            const id = `db-${t.id}`;
+            if (!seen.has(id)) {
+              seen.add(id);
+              added.push(id);
+            }
+          }
+          return added.length ? [...prev, ...added] : prev;
+        });
+      } catch {
+        // session not yet active
+      }
     };
-
-    room.on(RoomEvent.TranscriptionReceived, onTranscription);
+    poll();
+    const iv = setInterval(poll, 3000);
     return () => {
-      room.off(RoomEvent.TranscriptionReceived, onTranscription);
+      cancelled = true;
+      clearInterval(iv);
     };
-  }, [room]);
+  }, [sessionId]);
 
-  return order.map((id) => lines[id]).filter(Boolean);
+  return order.map((id) => lines.get(id)).filter(Boolean) as TranscriptLine[];
 }
