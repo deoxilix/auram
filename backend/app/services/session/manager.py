@@ -1,4 +1,5 @@
 """Live session lifecycle orchestration."""
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from uuid import UUID
 
@@ -8,11 +9,25 @@ from app.core.config import settings
 from app.core.database import async_session_factory
 from app.core.logging import get_logger
 from app.models.enums import InterruptionAction, PodcastStatus, SessionStatus
-from app.models.podcast import PodcastScript
+from app.models.podcast import PodcastScript, ScriptSegment
 from app.models.session import ConversationTurn, InterruptionEvent, LiveSession
-from app.services.session import livekit_ops
+from app.services.session import livekit_ops, vapi_ops
 
 log = get_logger(__name__)
+
+
+@dataclass
+class SessionConnection:
+    """Provider-specific connection details handed to the client on create/join."""
+
+    audio_provider: str
+    # LiveKit
+    token: str | None = None
+    ws_url: str | None = None
+    # VAPI
+    vapi_public_key: str | None = None
+    vapi_assistant_id: str | None = None
+    script_context: str | None = None
 
 
 def _now() -> datetime:
@@ -21,10 +36,11 @@ def _now() -> datetime:
 
 async def create_session(
     script_id: UUID, user_id: UUID | None = None
-) -> tuple[LiveSession, str]:
-    """Create a session: provision the room, dispatch the agent, mint a token.
+) -> tuple[LiveSession, SessionConnection]:
+    """Create a session and return provider-specific connection details.
 
-    Returns (session, user_token).
+    LiveKit: provisions a room, dispatches the agent, mints a join token.
+    VAPI: records the session and builds the script system-prompt for the client.
     """
     async with async_session_factory() as session:
         script = await session.get(PodcastScript, script_id)
@@ -36,13 +52,25 @@ async def create_session(
         live = LiveSession(
             script_id=script_id,
             user_id=user_id,
-            livekit_room_name="",  # set below using the row id
+            livekit_room_name="",  # set below for LiveKit; left blank for VAPI
             status=SessionStatus.WAITING,
         )
         session.add(live)
         await session.commit()
         await session.refresh(live)
 
+        if settings.audio_provider == "vapi":
+            stmt = (
+                select(ScriptSegment)
+                .where(ScriptSegment.script_id == script_id)
+                .order_by(ScriptSegment.sequence)
+            )
+            segments = list((await session.exec(stmt)).all())
+            conn = _vapi_connection(script, segments)
+            log.info("session_created", session_id=str(live.id), provider="vapi")
+            return live, conn
+
+        # LiveKit path: name the room after the row id.
         room_name = f"podcast-{live.id}"
         live.livekit_room_name = room_name
         session.add(live)
@@ -65,7 +93,21 @@ async def create_session(
         attributes={"role": "user", "speaker_id": "user"},
     )
     log.info("session_created", session_id=str(live.id), room=room_name)
-    return live, token
+    return live, SessionConnection(
+        audio_provider="livekit", token=token, ws_url=settings.livekit_ws_url
+    )
+
+
+def _vapi_connection(
+    script: PodcastScript, segments: list[ScriptSegment]
+) -> SessionConnection:
+    return SessionConnection(
+        audio_provider="vapi",
+        vapi_public_key=settings.vapi_public_key,
+        vapi_assistant_id=settings.vapi_assistant_id,
+        # The {{script}} template variable for the dashboard assistant.
+        script_context=vapi_ops.build_script_text(script, segments),
+    )
 
 
 async def get_session(session_id: UUID) -> LiveSession | None:
@@ -73,18 +115,37 @@ async def get_session(session_id: UUID) -> LiveSession | None:
         return await session.get(LiveSession, session_id)
 
 
-async def issue_join_token(session_id: UUID, user_id: UUID | None = None) -> str:
-    """Mint a fresh participant token for an existing session (reconnect/join)."""
-    live = await get_session(session_id)
-    if live is None:
-        raise ValueError(f"Session not found: {session_id}")
-    if live.status == SessionStatus.ENDED:
-        raise ValueError("Session has ended")
-    return livekit_ops.create_access_token(
-        identity=f"user-{user_id or live.id}",
+async def rejoin_session(
+    session_id: UUID, user_id: UUID | None = None
+) -> SessionConnection:
+    """Rebuild connection details for an existing session (reconnect/late join)."""
+    async with async_session_factory() as session:
+        live = await session.get(LiveSession, session_id)
+        if live is None:
+            raise ValueError(f"Session not found: {session_id}")
+        if live.status == SessionStatus.ENDED:
+            raise ValueError("Session has ended")
+
+        if settings.audio_provider == "vapi":
+            script = await session.get(PodcastScript, live.script_id)
+            stmt = (
+                select(ScriptSegment)
+                .where(ScriptSegment.script_id == live.script_id)
+                .order_by(ScriptSegment.sequence)
+            )
+            segments = list((await session.exec(stmt)).all())
+            return _vapi_connection(script, segments)
+
+        room_name = live.livekit_room_name
+
+    token = livekit_ops.create_access_token(
+        identity=f"user-{user_id or session_id}",
         name="You",
-        room=live.livekit_room_name,
+        room=room_name,
         attributes={"role": "user", "speaker_id": "user"},
+    )
+    return SessionConnection(
+        audio_provider="livekit", token=token, ws_url=settings.livekit_ws_url
     )
 
 
@@ -111,6 +172,8 @@ async def end_session(session_id: UUID) -> None:
         session.add(live)
         await session.commit()
         room_name = live.livekit_room_name
+    if not room_name:
+        return  # VAPI session: nothing to tear down server-side.
     try:
         await livekit_ops.delete_room(room_name)
     except Exception as exc:  # noqa: BLE001 — room may already be gone

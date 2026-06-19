@@ -6,6 +6,7 @@ import { sessionsApi } from "../api/client";
 import { useLeaveSession } from "../hooks/useSession";
 import { usePodcast } from "../hooks/usePodcasts";
 import SessionRoom from "../components/session/SessionRoom";
+import VapiSessionRoom from "../components/session/VapiSessionRoom";
 
 export default function SessionPage() {
   const { id: podcastId } = useParams<{ id: string }>();
@@ -41,7 +42,6 @@ export default function SessionPage() {
 
   const onLeave = async () => {
     if (session) await leaveSession.mutateAsync(session.id);
-    // Drop the cached session so the next Go Live creates a fresh one.
     queryClient.removeQueries({ queryKey: ["create-session", podcastId] });
     navigate("/library");
   };
@@ -50,7 +50,7 @@ export default function SessionPage() {
     return (
       <div className="rounded-xl border border-rose-200 bg-white p-8 text-center shadow-card">
         <p className="text-sm text-rose-600">
-          Could not start the session. Is LiveKit running?{" "}
+          Could not start the session. Is the backend running?{" "}
           <Link to="/library" className="underline">
             Back
           </Link>
@@ -59,7 +59,46 @@ export default function SessionPage() {
     );
   }
 
-  if (isLoading || !session || !session.token || !session.ws_url || !podcast) {
+  if (isLoading || !session || !podcast) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-brand-200 border-t-brand-400" />
+          <p className="text-sm text-[#565e74]">Starting live session…</p>
+        </div>
+      </div>
+    );
+  }
+
+  const currentIndex = liveState?.current_segment_index ?? 0;
+
+  // VAPI audio provider path.
+  if (session.audio_provider === "vapi") {
+    if (!session.vapi_public_key || !session.vapi_assistant_id) {
+      return (
+        <div className="rounded-xl border border-rose-200 bg-white p-8 text-center shadow-card">
+          <p className="text-sm text-rose-600">
+            VAPI is not configured. Set VAPI_PUBLIC_KEY and VAPI_ASSISTANT_ID.{" "}
+            <Link to="/library" className="underline">
+              Back
+            </Link>
+          </p>
+        </div>
+      );
+    }
+    return (
+      <VapiSessionRoom
+        podcast={podcast}
+        publicKey={session.vapi_public_key}
+        assistantId={session.vapi_assistant_id}
+        scriptContext={session.script_context ?? ""}
+        onLeave={onLeave}
+      />
+    );
+  }
+
+  // LiveKit audio provider path (fallback).
+  if (!session.token || !session.ws_url) {
     return (
       <div className="flex items-center justify-center py-20">
         <div className="flex flex-col items-center gap-3">
@@ -84,7 +123,7 @@ export default function SessionPage() {
     >
       <SessionRoom
         podcast={podcast}
-        currentIndex={liveState?.current_segment_index ?? 0}
+        currentIndex={currentIndex}
         onLeave={onLeave}
         sessionId={session?.id}
       />

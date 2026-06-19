@@ -5,8 +5,10 @@ Convert any content source (URLs, PDFs, text) into a conversational podcast.
 - **Phase 1** — content ingestion → script generation → multi-speaker TTS → web
   audio player.
 - **Phase 2** — live interactive sessions: join the podcast over WebRTC, hear an
-  AI host in real time, and interrupt to ask questions (LiveKit + OpenAI
-  Realtime).
+  AI host in real time, and interrupt to ask questions. Two interchangeable audio
+  providers, selected by `AUDIO_PROVIDER`:
+  - `livekit` — self-hosted LiveKit + OpenAI Realtime host agent
+  - `vapi` — VAPI cloud assistant (no LiveKit server or host-agent worker needed)
 
 See `plan.md` for the full roadmap.
 
@@ -18,12 +20,13 @@ See `plan.md` for the full roadmap.
 
 ## Prerequisites
 
-You need **PostgreSQL**, **Redis**, **Qdrant**, and (for live sessions)
-**LiveKit** running. The easiest path is Docker Compose:
+You need **PostgreSQL**, **Redis**, and **Qdrant** running. Live sessions also
+need **LiveKit** — but only when `AUDIO_PROVIDER=livekit`. The VAPI provider
+needs no extra local service. The easiest path is Docker Compose:
 
 ```bash
 cp .env.example .env          # then fill in OPENAI_API_KEY
-docker compose up -d postgres redis qdrant livekit
+docker compose up -d postgres redis qdrant       # add `livekit` for the LiveKit provider
 ```
 
 If you don't have Docker, run the three services however you prefer (Homebrew
@@ -58,18 +61,34 @@ Run tests:
 cd backend && source .venv/bin/activate && pytest -q
 ```
 
-### Host agent (live sessions)
+### Live sessions
 
-The realtime host runs as a separate LiveKit Agents worker. It needs an
-`OPENAI_API_KEY` with Realtime access and a running LiveKit server:
+When you click **Go Live** on a podcast, the backend creates a session and
+returns connection details for whichever provider `AUDIO_PROVIDER` selects.
+
+**LiveKit provider (`AUDIO_PROVIDER=livekit`)** — the backend provisions a
+LiveKit room and dispatches a realtime host agent into it. That agent runs as a
+separate LiveKit Agents worker and needs an `OPENAI_API_KEY` with Realtime
+access plus a running LiveKit server:
 
 ```bash
 cd backend && source .venv/bin/activate
 python -m app.agents.host_agent.agent dev
 ```
 
-When you click **Go Live** on a podcast, the backend provisions a LiveKit room
-and dispatches this agent into it.
+**VAPI provider (`AUDIO_PROVIDER=vapi`)** — no LiveKit server or host-agent
+worker. The browser connects straight to the VAPI cloud assistant; the backend
+just returns the assistant id, public key, and the script. Configure:
+
+```bash
+AUDIO_PROVIDER=vapi
+VAPI_PUBLIC_KEY=...     # public (browser) key, not the private key
+VAPI_ASSISTANT_ID=...   # assistant created on the VAPI dashboard
+```
+
+The dashboard assistant owns the persona and exposes `{{topic}}` and `{{script}}`
+template variables; the client fills them in per call. Restart the backend after
+changing `.env`.
 
 ## Frontend
 
@@ -106,8 +125,8 @@ needed when both run locally.
 | POST | `/api/v1/podcasts/{id}/audio/generate` | Synthesize audio |
 | GET | `/api/v1/podcasts/{id}/audio` | Audio manifest |
 | GET | `/api/v1/podcasts/{id}/audio/{segment_id}` | Stream a segment |
-| POST | `/api/v1/sessions` | Start a live session (returns token) |
+| POST | `/api/v1/sessions` | Start a live session (returns provider connection details) |
 | GET | `/api/v1/sessions/{id}` | Session state |
-| POST | `/api/v1/sessions/{id}/join` | Fresh participant token |
+| POST | `/api/v1/sessions/{id}/join` | Fresh connection details (reconnect) |
 | POST | `/api/v1/sessions/{id}/leave` | End the session |
 | GET | `/api/v1/sessions/{id}/history` | Conversation transcript |

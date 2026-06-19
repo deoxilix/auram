@@ -10,32 +10,39 @@ from app.models.schemas import (
     TurnResponse,
 )
 from app.services.session import manager
+from app.services.session.manager import SessionConnection
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
 
-def _to_response(live: LiveSession, *, token: str | None = None) -> SessionResponse:
+def _to_response(
+    live: LiveSession, *, conn: SessionConnection | None = None
+) -> SessionResponse:
     return SessionResponse(
         id=live.id,
         script_id=live.script_id,
         room_name=live.livekit_room_name,
         status=live.status,
         current_segment_index=live.current_segment_index,
-        ws_url=manager.ws_url() if token else None,
-        token=token,
+        audio_provider=conn.audio_provider if conn else "livekit",
+        ws_url=conn.ws_url if conn else None,
+        token=conn.token if conn else None,
+        vapi_public_key=conn.vapi_public_key if conn else None,
+        vapi_assistant_id=conn.vapi_assistant_id if conn else None,
+        script_context=conn.script_context if conn else None,
     )
 
 
 @router.post("", response_model=SessionResponse, status_code=201)
 async def create_session(req: CreateSessionRequest) -> SessionResponse:
-    """Create a live session: provisions a room + agent and returns a token."""
+    """Create a live session and return provider-specific connection details."""
     try:
-        live, token = await manager.create_session(req.podcast_id)
+        live, conn = await manager.create_session(req.podcast_id)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
-    except Exception as exc:  # noqa: BLE001 — surface LiveKit connectivity issues
-        raise HTTPException(502, f"LiveKit error: {exc}") from exc
-    return _to_response(live, token=token)
+    except Exception as exc:  # noqa: BLE001 — surface provider connectivity issues
+        raise HTTPException(502, f"Live session error: {exc}") from exc
+    return _to_response(live, conn=conn)
 
 
 @router.get("/{session_id}", response_model=SessionResponse)
@@ -53,10 +60,10 @@ async def join_session(session_id: UUID) -> SessionResponse:
     if live is None:
         raise HTTPException(404, "Session not found")
     try:
-        token = await manager.issue_join_token(session_id)
+        conn = await manager.rejoin_session(session_id)
     except ValueError as exc:
         raise HTTPException(409, str(exc)) from exc
-    return _to_response(live, token=token)
+    return _to_response(live, conn=conn)
 
 
 @router.post("/{session_id}/leave", status_code=204)

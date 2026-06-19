@@ -76,14 +76,22 @@ export interface AudioManifest {
 
 export type SessionStatus = "waiting" | "live" | "paused" | "ended";
 
+export type AudioProvider = "livekit" | "vapi";
+
 export interface SessionResponse {
   id: string;
   script_id: string;
   room_name: string;
   status: SessionStatus;
   current_segment_index: number;
+  audio_provider: AudioProvider;
+  // LiveKit
   ws_url: string | null;
   token: string | null;
+  // VAPI
+  vapi_public_key: string | null;
+  vapi_assistant_id: string | null;
+  script_context: string | null;
 }
 
 export interface TurnResponse {

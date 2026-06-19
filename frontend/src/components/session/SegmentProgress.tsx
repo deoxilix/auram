@@ -3,11 +3,22 @@ import type { PodcastResponse } from "../../types";
 interface Props {
   podcast: PodcastResponse;
   currentIndex: number;
+  /** Optional 0..1 fill override for a smooth (e.g. time-based) progress bar. */
+  fraction?: number;
 }
 
-export default function SegmentProgress({ podcast, currentIndex }: Props) {
+export default function SegmentProgress({
+  podcast,
+  currentIndex,
+  fraction,
+}: Props) {
   const total = podcast.segments.length;
-  const pct = total ? Math.min((currentIndex / total) * 100, 100) : 0;
+  const pct =
+    fraction !== undefined
+      ? Math.min(fraction * 100, 100)
+      : total
+        ? Math.min((currentIndex / total) * 100, 100)
+        : 0;
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4">

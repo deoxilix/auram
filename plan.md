@@ -86,9 +86,9 @@ auram/
 
 ### Backend
 
-- [ ] Project scaffold: FastAPI + SQLModel + Alembic migrations + Celery
-- [ ] Docker Compose: `postgres`, `redis`, `qdrant` services
-- [ ] **Ingestion Service** (`services/ingestion/`)
+- [x] Project scaffold: FastAPI + SQLModel + Alembic migrations + Celery
+- [x] Docker Compose: `postgres`, `redis`, `qdrant` services
+- [x] **Ingestion Service** (`services/ingestion/`)
   - URL extractor via `trafilatura`
   - PDF extractor via `PyMuPDF`
   - Plain text input
@@ -97,30 +97,30 @@ auram/
   - Batch embedder via OpenAI `text-embedding-3-large`
   - Store document + chunks to Postgres + Qdrant
   - REST: `POST /api/v1/documents`, `GET /api/v1/documents/{id}`
-- [ ] **Script Generator** (`services/script_generator/`)
+- [x] **Script Generator** (`services/script_generator/`)
   - Build prompt from document content + `ScriptParams`
   - Call GPT-4o in JSON mode, parse into `PodcastScript` schema
   - Validate output (completeness, duration estimates)
   - Assign speaker profiles and voice IDs
   - REST: `POST /api/v1/podcasts/generate`, `GET /api/v1/podcasts/{id}`
-- [ ] **TTS Pipeline** (`services/tts/`)
+- [x] **TTS Pipeline** (`services/tts/`)
   - Provider abstraction protocol (`TTSProvider`)
   - OpenAI TTS provider (primary)
   - Batch synthesize all script segments → store audio per segment
-  - Cache synthesized audio in Redis + local/object storage
+  - Cache synthesized audio on disk (content-addressed)
   - REST: `GET /api/v1/podcasts/{id}/audio`
 
 ### Frontend
 
-- [ ] Project scaffold: Vite + React 18 + TypeScript + Tailwind
-- [ ] **Upload Page** — drag-drop PDF/URL/text, progress indicator (ingestion status polling)
-- [ ] **Library Page** — podcast cards with metadata, play/delete actions
-- [ ] **Audio Player** — segmented playback of pre-generated podcast, transcript panel
-- [ ] API client (TanStack Query) wired to all backend endpoints
+- [x] Project scaffold: Vite + React 18 + TypeScript + Tailwind
+- [x] **Upload Page** — drag-drop PDF/URL/text, progress indicator (ingestion status polling)
+- [x] **Library Page** — podcast cards with metadata, play/delete actions
+- [x] **Audio Player** — segmented playback of pre-generated podcast, transcript panel
+- [x] API client (TanStack Query) wired to all backend endpoints
 
 ### Infrastructure
 
-- [ ] `.env.example` with all required variables
+- [x] `.env.example` with all required variables
 - [ ] GitHub Actions CI: lint, typecheck, pytest
 - [ ] Staging deploy
 
@@ -141,45 +141,159 @@ auram/
 
 ### Backend
 
-- [ ] **Session Manager** (`services/session/`)
+- [x] **Session Manager** (`services/session/`)
   - Create LiveKit room, issue host + user tokens
   - Track session state: current segment index, history
   - Handle reconnection (resume at correct segment)
   - Session cleanup on end
   - REST: `POST /api/v1/sessions`, `POST /api/v1/sessions/{id}/join`
-- [ ] **Host Agent** (`agents/host_agent/`)
-  - `HostAgent` class extending `livekit_agents.llm.RealtimeAgent`
+- [x] **Host Agent** (`agents/host_agent/`)
+  - `HostAgent(Agent)` using LiveKit Agents 1.x + OpenAI Realtime (`gpt-realtime`)
   - System prompt injection: script overview, current segment, upcoming topics
   - Function tools:
     - `get_current_segment()` → returns text for current position
     - `advance_segment()` → moves to next segment
     - `answer_question(question)` → RAG-backed answer from source doc
     - `defer_question(topic)` → marks for later, continues script
-    - `get_conversation_summary()` → recent context for continuity
-  - State machine: `WAITING → INTRO → TOPIC_SEGMENTS → Q&A → OUTRO → ENDED`
-  - Interruption handling via `conversation.item.truncate`
-  - Turn-taking: host speaks → guest speaks → invite user
+  - State machine: `WAITING → INTRO → TOPIC_SEGMENTS → ENDED`
+  - Kicks off intro via `session.generate_reply()` on connect
+  - ~~`get_conversation_summary()`~~ — not implemented
+  - ~~Turn-taking guest speaker~~ — single host voice only
 - [ ] WebSocket / LiveKit data channel events for control messages
 
 ### Frontend
 
-- [ ] **Session Page** (`pages/SessionPage.tsx`)
+- [x] **Session Page** (`pages/SessionPage.tsx`)
   - `AudioVisualizer` — animated waveform per speaker
   - `TranscriptPanel` — real-time scrolling transcript with speaker labels
   - `SegmentProgress` — visual progress through podcast topics
   - `InterruptionButton` — push-to-talk "Interrupt / Ask" button
   - `TopicSidebar` — upcoming topics, deferred questions list
-  - Session controls: pause, volume, leave
-- [ ] **LiveKit integration hooks**
-  - `useLiveKitRoom()` — connection, participants
-  - `useLocalAudio()` — microphone, VAD, push-to-talk
-  - `useRemoteAudio()` — host and guest tracks
-  - `useDataChannel()` — interrupt and segment-change control messages
-  - `useTranscription()` — real-time STT for user speech display
+  - Leave session control
+  - Session creation via cached `useQuery` (survives React StrictMode double-mount)
+- [x] **LiveKit integration hooks**
+  - `useVoiceAssistant()` — agent audio state from `@livekit/components-react`
+  - `useTranscriptions` (`hooks/useTranscriptions.ts`) — real-time STT transcript
+  - Push-to-talk via `InterruptionButton` + `useLocalParticipant`
+  - ~~`useLiveKitRoom()` / `useDataChannel()`~~ — not needed with Agents SDK
 - [ ] `SpeakerAvatar` — animated speaking indicator per participant
 - [ ] Auto-reconnect on network drop
 
 **Exit criteria**: User clicks "Go Live", joins a WebRTC room, listens to the AI host and guest work through the script, and can press interrupt to ask a question mid-conversation.
+
+---
+
+## Phase 2b — VAPI Audio Integration (Hackathon branch: `vapi-swap-integration`)
+
+**Goal**: Swap the LiveKit + OpenAI Realtime audio layer for VAPI, keeping both paths swappable via a single env var. The ingestion, script generation, TTS, and database layers are untouched.
+
+### What VAPI replaces
+
+| Removed (LiveKit path) | Replaced by (VAPI path) |
+|---|---|
+| LiveKit SFU server | VAPI cloud (handles WebRTC) |
+| Python host agent worker | VAPI assistant (configured on dashboard) |
+| OpenAI Realtime API | VAPI's built-in LLM/TTS |
+| `@livekit/components-react` | `@vapi-ai/web` SDK |
+
+No LiveKit server or Python agent worker is needed in the VAPI path.
+
+### New env vars
+
+```bash
+# Audio provider: livekit (default) | vapi
+AUDIO_PROVIDER=vapi
+
+# VAPI credentials
+VAPI_PUBLIC_KEY=...          # browser-safe public key from VAPI dashboard
+VAPI_ASSISTANT_ID=...        # assistant created on VAPI dashboard
+```
+
+### Backend changes
+
+- [x] `backend/app/core/config.py` — added `audio_provider`, `vapi_public_key`, `vapi_assistant_id` fields
+- [x] New `backend/app/services/session/vapi_ops.py`
+  - `build_script_context(script, segments)` → formats host guidance + segments into a system prompt string
+  - ~~`create_vapi_call()`~~ — not needed; the browser SDK starts the call directly with overrides
+- [x] `backend/app/services/session/manager.py` — branch in `create_session()` + `rejoin_session()`:
+  - `AUDIO_PROVIDER=livekit` → existing path (room + agent dispatch + LiveKit token)
+  - `AUDIO_PROVIDER=vapi` → skip room/agent, write DB record, return script context + VAPI credentials
+  - returns a `SessionConnection` dataclass carrying provider-specific fields; `end_session` skips room teardown for VAPI
+- [x] `backend/app/models/schemas.py` — extended `SessionResponse` with `audio_provider`, `vapi_public_key`, `vapi_assistant_id`, `script_context` (all nullable alongside `token`/`ws_url`)
+- [x] `backend/app/api/routes/sessions.py` — `_to_response` maps the `SessionConnection` onto the response
+
+### Frontend changes
+
+- [x] Install `@vapi-ai/web` (v2.5.2)
+- [x] New `frontend/src/hooks/useVapi.ts`
+  - Wraps VAPI SDK: `start()`, `stop()`, `setMuted()` (push-to-talk)
+  - Exposes: `isConnected`, `isSpeaking`, `volume`, `lines: TranscriptLine[]`, `error`
+  - Maps VAPI events (`call-start`, `speech-start/end`, `volume-level`, `message`, `error`) to app state
+- [x] New `frontend/src/components/session/VapiSessionRoom.tsx`
+  - Replaces `SessionRoom.tsx` for the VAPI path
+  - Uses `useVapi`; auto-starts the call, mutes mic for push-to-talk
+  - Passes `script_context` as `assistantOverrides.model.messages[system]` on call start
+  - Volume-driven visualizer; reuses `TranscriptView`, `SegmentProgress`, `TopicSidebar`
+- [x] Extracted `TranscriptView.tsx` (presentational) so both providers share the transcript UI
+- [x] New `frontend/src/hooks/useEstimatedProgress.ts` — derives an approximate segment index + smooth fraction from elapsed call time vs each segment's `estimated_duration_sec` (since VAPI gives no server-side cursor)
+- [x] `SegmentProgress.tsx` — optional `fraction` prop for a smooth time-based fill
+- [x] `frontend/src/pages/SessionPage.tsx` — branches on `session.audio_provider`:
+  - `livekit` → existing `<LiveKitRoom>` + `<SessionRoom>` render
+  - `vapi` → `<VapiSessionRoom>` render (no LiveKitRoom wrapper)
+- [x] No frontend env needed — provider + VAPI public key arrive in the session response from the backend
+
+### Prompt strategy (final — template variables)
+
+The teammate built the **"Aarum Host (Alex)"** assistant (ID `780b0004-1948-461f-8a0d-e04340a34ea7`, voice Vapi Elliot) on the dashboard with its own persona and two runtime template variables: `{{topic}}` and `{{script}}`. So we use **variable injection**, not a system-prompt override:
+
+- Backend `vapi_ops.build_script_text(script, segments)` → renders the `{{script}}` value (overview + segments only, no persona — the dashboard owns that)
+- Frontend passes `variableValues: { topic: podcast.title, script: session.script_context }` as the 2nd arg to `vapi.start(assistantId, ...)`
+- Note: the web SDK's 2nd arg **is** the `AssistantOverrides` object directly — `variableValues` sits at its top level, *not* wrapped in `{ assistantOverrides: {...} }` (that nesting is the server REST API shape)
+
+> **Note:** The VAPI path estimates progress from elapsed time (the conversation
+> runs entirely in VAPI's cloud, so there's no real server-side script cursor).
+> The bar fills smoothly and "Coming up" advances approximately. Exact per-segment
+> tracking would require VAPI server-side function tools / webhooks (future work).
+
+### Script context injection
+
+When starting a VAPI call, pass the podcast script as an assistant override so the VAPI assistant knows what to cover:
+
+```typescript
+vapi.start(assistantId, {
+  firstMessage: "Welcome! Let's dive into today's podcast.",
+  model: {
+    systemPrompt: session.script_context,  // built server-side from segments
+  },
+});
+```
+
+`build_script_context()` formats it as:
+
+```
+You are hosting a podcast on: <title>
+Overview: <overview>
+
+Script segments (cover them in order):
+[1] (intro) <text>
+[2] (topic) <text>
+...
+After each segment, transition naturally to the next.
+The listener may interrupt at any time to ask questions — answer from the script context, then resume.
+```
+
+### What stays the same
+
+- All ingestion, script generation, TTS endpoints and services
+- Database models (LiveSession still records the session; `livekit_room_name` is left blank for VAPI sessions)
+- Library, Upload, and Player pages
+- All 17 existing tests
+
+### Swappability
+
+Set `AUDIO_PROVIDER=livekit` (and run LiveKit server + agent worker) to use the full LiveKit path. Set `AUDIO_PROVIDER=vapi` (and set VAPI keys) to use VAPI — no other services needed. Both paths coexist in the same codebase on the `vapi-swap-integration` branch.
+
+**Exit criteria**: User uploads content, generates a script, clicks "Go Live", and has a real-time voice conversation with the VAPI assistant that follows the podcast script.
 
 ---
 

@@ -83,9 +83,15 @@ class SessionResponse(BaseModel):
     room_name: str
     status: SessionStatus
     current_segment_index: int
-    # Connection details (token only populated on create/join).
+    # Which audio backend the client should use ("livekit" | "vapi").
+    audio_provider: str = "livekit"
+    # LiveKit connection details (populated on create/join).
     ws_url: str | None = None
     token: str | None = None
+    # VAPI connection details (populated on create/join).
+    vapi_public_key: str | None = None
+    vapi_assistant_id: str | None = None
+    script_context: str | None = None
 
 
 class TurnResponse(BaseModel):
