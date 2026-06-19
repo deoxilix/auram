@@ -33,11 +33,19 @@ class Settings(BaseSettings):
     qdrant_api_key: str | None = None
     qdrant_collection: str = "auram_chunks"
 
+    # Audio provider for live sessions: "livekit" (self-hosted agent) or "vapi".
+    audio_provider: Literal["livekit", "vapi"] = "livekit"
+
     # LiveKit
     livekit_api_key: str = "devkey"
     livekit_api_secret: str = "secret"
     # ws/wss URL the agent + clients connect to.
     livekit_ws_url: str = "ws://localhost:7880"
+
+    # VAPI (used when audio_provider == "vapi"). The assistant is configured on
+    # the VAPI dashboard; we pass the script as a per-call system-prompt override.
+    vapi_public_key: str = ""
+    vapi_assistant_id: str = ""
 
     # Realtime host agent (use the GA model; override in .env if needed)
     realtime_model: str = "gpt-realtime"

@@ -6,6 +6,7 @@ import { sessionsApi } from "../api/client";
 import { useLeaveSession } from "../hooks/useSession";
 import { usePodcast } from "../hooks/usePodcasts";
 import SessionRoom from "../components/session/SessionRoom";
+import VapiSessionRoom from "../components/session/VapiSessionRoom";
 
 export default function SessionPage() {
   const { id: podcastId } = useParams<{ id: string }>();
@@ -57,7 +58,35 @@ export default function SessionPage() {
     );
   }
 
-  if (isLoading || !session || !session.token || !session.ws_url || !podcast) {
+  if (isLoading || !session || !podcast) {
+    return <p className="text-sm text-slate-500">Starting live session…</p>;
+  }
+
+  const currentIndex = liveState?.current_segment_index ?? 0;
+
+  if (session.audio_provider === "vapi") {
+    if (!session.vapi_public_key || !session.vapi_assistant_id) {
+      return (
+        <div className="text-sm text-rose-600">
+          VAPI is not configured. Set VAPI_PUBLIC_KEY and VAPI_ASSISTANT_ID.{" "}
+          <Link to="/library" className="underline">
+            Back
+          </Link>
+        </div>
+      );
+    }
+    return (
+      <VapiSessionRoom
+        podcast={podcast}
+        publicKey={session.vapi_public_key}
+        assistantId={session.vapi_assistant_id}
+        scriptContext={session.script_context ?? ""}
+        onLeave={onLeave}
+      />
+    );
+  }
+
+  if (!session.token || !session.ws_url) {
     return <p className="text-sm text-slate-500">Starting live session…</p>;
   }
 
@@ -75,7 +104,7 @@ export default function SessionPage() {
     >
       <SessionRoom
         podcast={podcast}
-        currentIndex={liveState?.current_segment_index ?? 0}
+        currentIndex={currentIndex}
         onLeave={onLeave}
       />
     </LiveKitRoom>
