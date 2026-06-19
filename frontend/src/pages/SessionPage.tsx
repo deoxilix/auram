@@ -48,17 +48,26 @@ export default function SessionPage() {
 
   if (isError) {
     return (
-      <div className="text-sm text-rose-600">
-        Could not start the session. Is LiveKit running?{" "}
-        <Link to="/library" className="underline">
-          Back
-        </Link>
+      <div className="rounded-xl border border-rose-200 bg-white p-8 text-center shadow-card">
+        <p className="text-sm text-rose-600">
+          Could not start the session. Is LiveKit running?{" "}
+          <Link to="/library" className="underline">
+            Back
+          </Link>
+        </p>
       </div>
     );
   }
 
   if (isLoading || !session || !session.token || !session.ws_url || !podcast) {
-    return <p className="text-sm text-slate-500">Starting live session…</p>;
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-brand-200 border-t-brand-400" />
+          <p className="text-sm text-[#565e74]">Starting live session…</p>
+        </div>
+      </div>
+    );
   }
 
   return (

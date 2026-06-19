@@ -47,27 +47,42 @@ export default function AudioPlayer({ podcast, manifest }: Props) {
     return <p className="text-sm text-slate-500">No audio available yet.</p>;
   }
 
+  const progress = playable.length > 0 ? (current + 1) / playable.length : 0;
+
   return (
-    <div>
-      <div className="mb-4 flex items-center gap-3 rounded-lg border border-slate-200 bg-white p-4">
+    <div className="rounded-xl border border-slate-200 bg-white shadow-card">
+      {/* Progress bar */}
+      <div className="h-1.5 w-full overflow-hidden rounded-t-xl bg-slate-100">
+        <div
+          className="h-full bg-brand-400 transition-all duration-300"
+          style={{ width: `${progress * 100}%` }}
+        />
+      </div>
+
+      {/* Controls */}
+      <div className="flex items-center gap-4 p-5">
         <button
-          className="flex h-12 w-12 items-center justify-center rounded-full bg-brand-600 text-white"
+          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-brand-400 text-white shadow-sm transition hover:bg-brand-500 active:scale-95"
           onClick={toggle}
         >
           {playing ? "❚❚" : "▶"}
         </button>
-        <div className="text-sm">
-          <div className="font-medium">
-            Segment {current + 1} / {playable.length}
-          </div>
-          <div className="text-slate-500">
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold text-[#0b1c30]">
             {speakerName(manifest.segments[current]?.speaker_id ?? "")}
-          </div>
+          </p>
+          <p className="truncate text-xs text-[#565e74]">
+            Segment {current + 1} of {playable.length}
+          </p>
+        </div>
+        <div className="text-sm font-medium text-[#565e74]">
+          {Math.round(progress * 100)}%
         </div>
         <audio ref={audioRef} onEnded={onEnded} className="hidden" />
       </div>
 
-      <div className="space-y-2">
+      {/* Segment transcript list */}
+      <div className="max-h-80 space-y-1 overflow-y-auto border-t border-slate-100 p-4">
         {podcast.segments.map((seg) => {
           const isActive = playable[current]?.segment_id === seg.id;
           return (
@@ -81,16 +96,16 @@ export default function AudioPlayer({ podcast, manifest }: Props) {
                 }
               }}
               className={
-                "block w-full rounded-lg border p-3 text-left text-sm transition " +
+                "block w-full rounded-lg px-3 py-2.5 text-left text-sm transition " +
                 (isActive
-                  ? "border-brand-600 bg-brand-50"
-                  : "border-slate-200 bg-white hover:bg-slate-50")
+                  ? "bg-brand-50 text-brand-700"
+                  : "text-slate-600 hover:bg-slate-50")
               }
             >
-              <span className="mr-2 font-semibold text-brand-700">
+              <span className={`mr-2 font-semibold ${isActive ? "text-brand-500" : "text-slate-500"}`}>
                 {speakerName(seg.speaker_id)}:
               </span>
-              <span className="text-slate-700">{seg.text}</span>
+              <span className={isActive ? "" : "text-slate-600"}>{seg.text}</span>
             </button>
           );
         })}
