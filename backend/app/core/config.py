@@ -1,12 +1,23 @@
 """Application configuration loaded from environment variables."""
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Resolve .env by absolute path so config loads regardless of the working
+# directory (the LiveKit agent runs job subprocesses from a different CWD).
+# backend/app/core/config.py -> parents: [core, app, backend, repo-root]
+_BACKEND_DIR = Path(__file__).resolve().parents[2]
+_REPO_ROOT = _BACKEND_DIR.parent
+# Later files take priority; backend/.env wins over the repo-root .env.
+_ENV_FILES = (_REPO_ROOT / ".env", _BACKEND_DIR / ".env")
+
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=[str(p) for p in _ENV_FILES], extra="ignore"
+    )
 
     # App
     app_env: Literal["development", "staging", "production"] = "development"
@@ -28,8 +39,8 @@ class Settings(BaseSettings):
     # ws/wss URL the agent + clients connect to.
     livekit_ws_url: str = "ws://localhost:7880"
 
-    # Realtime host agent
-    realtime_model: str = "gpt-4o-realtime-preview-2024-12-17"
+    # Realtime host agent (use the GA model; override in .env if needed)
+    realtime_model: str = "gpt-realtime"
     realtime_voice: str = "alloy"
 
     # AI providers
