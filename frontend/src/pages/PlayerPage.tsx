@@ -13,6 +13,7 @@ export default function PlayerPage() {
   const navigate = useNavigate();
   const { data: podcast, isLoading } = usePodcast(id);
   const [audioRequested, setAudioRequested] = useState(false);
+  const [provider, setProvider] = useState("vapi");
   const { data: manifest } = useAudioManifest(id, audioRequested);
   const generateAudio = useGenerateAudio();
 
@@ -55,14 +56,24 @@ export default function PlayerPage() {
             <p className="mt-3 text-sm text-slate-600 max-w-2xl">{podcast.overview}</p>
           )}
         </div>
-        <button
-          className="flex items-center gap-2 rounded-xl bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600 active:scale-[0.98] disabled:opacity-40"
-          disabled={podcast.status !== "ready"}
-          onClick={() => navigate(`/podcasts/${podcast.id}/live`)}
-        >
-          <span>▶</span>
-          Go Live
-        </button>
+        <div className="flex items-center gap-3">
+          <select
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-[#565e74] outline-none"
+            value={provider}
+            onChange={(e) => setProvider(e.target.value)}
+          >
+            <option value="vapi">Vapi</option>
+            <option value="livekit">LiveKit</option>
+          </select>
+          <button
+            className="flex items-center gap-2 rounded-xl bg-emerald-500 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-600 active:scale-[0.98] disabled:opacity-40"
+            disabled={podcast.status !== "ready"}
+            onClick={() => navigate(`/podcasts/${podcast.id}/live?provider=${provider}`)}
+          >
+            <span>▶</span>
+            Go Live
+          </button>
+        </div>
       </div>
 
       {/* Audio generation */}

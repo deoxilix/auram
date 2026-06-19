@@ -11,7 +11,7 @@ from app.models.podcast import PodcastScript, ScriptSegment
 def build_script_text(script: PodcastScript, segments: list[ScriptSegment]) -> str:
     """Render the script into the `{{script}}` variable for the VAPI assistant."""
     lines = [
-        f"Segment {i + 1} ({seg.segment_type}): {seg.text}"
+        f"Segment {i + 1} ({seg.segment_type}, {seg.speaker_id.upper()}): {seg.text}"
         for i, seg in enumerate(segments)
     ]
     body = "\n".join(lines) if lines else "(no segments)"

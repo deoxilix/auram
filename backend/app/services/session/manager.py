@@ -35,13 +35,15 @@ def _now() -> datetime:
 
 
 async def create_session(
-    script_id: UUID, user_id: UUID | None = None
+    script_id: UUID, user_id: UUID | None = None, provider: str | None = None
 ) -> tuple[LiveSession, SessionConnection]:
     """Create a session and return provider-specific connection details.
 
     LiveKit: provisions a room, dispatches the agent, mints a join token.
     VAPI: records the session and builds the script system-prompt for the client.
     """
+    # Allow per-request provider override; fall back to env config.
+    active_provider = provider or settings.audio_provider
     async with async_session_factory() as session:
         script = await session.get(PodcastScript, script_id)
         if script is None:
@@ -59,7 +61,7 @@ async def create_session(
         await session.commit()
         await session.refresh(live)
 
-        if settings.audio_provider == "vapi":
+        if active_provider == "vapi":
             stmt = (
                 select(ScriptSegment)
                 .where(ScriptSegment.script_id == script_id)
@@ -67,7 +69,11 @@ async def create_session(
             )
             segments = list((await session.exec(stmt)).all())
             conn = _vapi_connection(script, segments)
-            log.info("session_created", session_id=str(live.id), provider="vapi")
+            log.info("session_created", session_id=str(live.id), provider="vapi",
+                     script_len=len(conn.script_context or ""))
+            if conn.script_context:
+                log.debug("vapi_script_context_preview",
+                          preview=conn.script_context[:300])
             return live, conn
 
         # LiveKit path: name the room after the row id.

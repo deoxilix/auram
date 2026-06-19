@@ -37,7 +37,7 @@ def _to_response(
 async def create_session(req: CreateSessionRequest) -> SessionResponse:
     """Create a live session and return provider-specific connection details."""
     try:
-        live, conn = await manager.create_session(req.podcast_id)
+        live, conn = await manager.create_session(req.podcast_id, provider=req.provider)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
     except Exception as exc:  # noqa: BLE001 — surface provider connectivity issues

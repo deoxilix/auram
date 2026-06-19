@@ -75,6 +75,7 @@ class PodcastResponse(BaseModel):
 # ---- Sessions ----
 class CreateSessionRequest(BaseModel):
     podcast_id: UUID
+    provider: str | None = None
 
 
 class SessionResponse(BaseModel):

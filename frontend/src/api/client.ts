@@ -54,9 +54,9 @@ export const podcastsApi = {
 };
 
 export const sessionsApi = {
-  create: (podcast_id: string) =>
+  create: (podcast_id: string, provider?: string) =>
     api
-      .post<SessionResponse>("/api/v1/sessions", { podcast_id })
+      .post<SessionResponse>("/api/v1/sessions", { podcast_id, provider })
       .then((r) => r.data),
 
   get: (id: string) =>

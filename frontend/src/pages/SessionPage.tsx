@@ -15,6 +15,14 @@ export default function SessionPage() {
   const { data: podcast } = usePodcast(podcastId);
   const leaveSession = useLeaveSession();
 
+  // Read provider from URL query param, default to the env-configured provider.
+  const searchParams = new URLSearchParams(window.location.search);
+  const overriddenProvider = searchParams.get("provider");
+
+  const queryFn = overriddenProvider
+    ? () => sessionsApi.create(podcastId!, overriddenProvider)
+    : () => sessionsApi.create(podcastId!);
+
   // Create the session via a cached query so it fires exactly once and the
   // result survives React StrictMode's mount/unmount/mount in dev.
   const {
@@ -23,7 +31,7 @@ export default function SessionPage() {
     isLoading,
   } = useQuery({
     queryKey: ["create-session", podcastId],
-    queryFn: () => sessionsApi.create(podcastId!),
+    queryFn: queryFn,
     enabled: !!podcastId,
     staleTime: Infinity,
     gcTime: Infinity,
